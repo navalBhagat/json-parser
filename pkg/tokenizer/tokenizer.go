@@ -11,6 +11,10 @@ type TokenType int
 const (
 	TokenLeftBrace TokenType = iota
 	TokenRightBrace
+	TokenColon
+	TokenComma
+	TokenString
+	TokenKeyValue
 	TokenEOF
 )
 
@@ -58,6 +62,12 @@ func (t *Tokenizer) NextToken() (Token, error) {
 		return Token{Type: TokenLeftBrace, Value: "{"}, nil
 	case '}':
 		return Token{Type: TokenRightBrace, Value: "}"}, nil
+	case ':':
+		return Token{Type: TokenColon, Value: ":"}, nil
+	case ',':
+		return Token{Type: TokenComma, Value: ","}, nil
+	case '"':
+		return t.ReadString()
 	}
 
 	if char == ' ' || char == '\t' || char == '\n' || char == '\r' {
@@ -65,4 +75,16 @@ func (t *Tokenizer) NextToken() (Token, error) {
 	}
 
 	return Token{}, fmt.Errorf("unexpected character: %c", char)
+}
+
+func (t *Tokenizer) ReadString() (Token, error) {
+	var str string
+	for t.scanner.Scan() {
+		char := t.scanner.Bytes()[0]
+		if char == '"' {
+			return Token{Type: TokenString, Value: str}, nil
+		}
+		str += string(char)
+	}
+	return Token{}, fmt.Errorf("unterminated string")
 }

@@ -30,7 +30,6 @@ func main() {
 	if parser.Parse(t) {
 		os.Exit(0)
 	} else {
-		fmt.Println("Invalid json.")
 		os.Exit(1)
 	}
 }
