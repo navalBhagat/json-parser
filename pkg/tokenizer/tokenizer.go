@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"unicode"
 )
 
 type TokenType int
@@ -15,6 +16,10 @@ const (
 	TokenComma
 	TokenString
 	TokenKeyValue
+	TokenNull
+	TokenTrue
+	TokenFalse
+	TokenNumber
 	TokenEOF
 )
 
@@ -25,6 +30,7 @@ type Token struct {
 
 type Tokenizer struct {
 	scanner *bufio.Scanner
+	buffer  *byte
 }
 
 func NewTokenizerFromReader(r io.Reader) *Tokenizer {
@@ -32,6 +38,7 @@ func NewTokenizerFromReader(r io.Reader) *Tokenizer {
 	scanner.Split(byteByByteSplitter)
 	return &Tokenizer{
 		scanner: scanner,
+		buffer:  nil,
 	}
 }
 
@@ -48,14 +55,20 @@ func byteByByteSplitter(data []byte, atEOF bool) (advance int, token []byte, err
 }
 
 func (t *Tokenizer) NextToken() (Token, error) {
-	if !t.scanner.Scan() {
-		if err := t.scanner.Err(); err != nil {
-			return Token{}, err
-		}
-		return Token{Type: TokenEOF}, nil
-	}
+	var char byte
 
-	char := t.scanner.Bytes()[0]
+	if t.buffer != nil {
+		char = *t.buffer
+		t.buffer = nil
+	} else {
+		if !t.scanner.Scan() {
+			if err := t.scanner.Err(); err != nil {
+				return Token{}, err
+			}
+			return Token{Type: TokenEOF}, nil
+		}
+		char = t.scanner.Bytes()[0]
+	}
 
 	switch char {
 	case '{':
@@ -68,10 +81,20 @@ func (t *Tokenizer) NextToken() (Token, error) {
 		return Token{Type: TokenComma, Value: ","}, nil
 	case '"':
 		return t.ReadString()
+	case 'n':
+		return t.ReadNull("n")
+	case 't':
+		return t.ReadTrue("t")
+	case 'f':
+		return t.ReadFalse("f")
 	}
 
 	if char == ' ' || char == '\t' || char == '\n' || char == '\r' {
 		return t.NextToken()
+	}
+
+	if unicode.IsDigit(rune(char)) || char == '-' {
+		return t.ReadNumber(char)
 	}
 
 	return Token{}, fmt.Errorf("unexpected character: %c", char)
@@ -87,4 +110,84 @@ func (t *Tokenizer) ReadString() (Token, error) {
 		str += string(char)
 	}
 	return Token{}, fmt.Errorf("unterminated string")
+}
+
+func (t *Tokenizer) ReadNull(str string) (Token, error) {
+	expected := "null"
+	for t.scanner.Scan() {
+		char := t.scanner.Bytes()[0]
+		str += string(char)
+		if len(str) > len(expected) || char != expected[len(str)-1] {
+			t.buffer = &char
+			str = str[:len(str)-1]
+			break
+		}
+		if len(str) == len(expected) {
+			break
+		}
+	}
+
+	if str == "null" {
+		return Token{Type: TokenNull, Value: "null"}, nil
+	}
+	return Token{}, fmt.Errorf("incorrect spelling for 'null'")
+}
+
+func (t *Tokenizer) ReadTrue(str string) (Token, error) {
+	expected := "true"
+	for t.scanner.Scan() {
+		char := t.scanner.Bytes()[0]
+		str += string(char)
+		if len(str) > len(expected) || char != expected[len(str)-1] {
+			t.buffer = &char
+			str = str[:len(str)-1]
+			break
+		}
+		if len(str) == len(expected) {
+			break
+		}
+	}
+
+	if str == "true" {
+		return Token{Type: TokenTrue, Value: "true"}, nil
+	}
+	return Token{}, fmt.Errorf("incorrect spelling for 'true'")
+}
+
+func (t *Tokenizer) ReadFalse(str string) (Token, error) {
+	expected := "false"
+	for t.scanner.Scan() {
+		char := t.scanner.Bytes()[0]
+		str += string(char)
+		if len(str) > len(expected) || char != expected[len(str)-1] {
+			t.buffer = &char
+			str = str[:len(str)-1]
+			break
+		}
+		if len(str) == len(expected) {
+			break
+		}
+	}
+
+	if str == "false" {
+		return Token{Type: TokenFalse, Value: "false"}, nil
+	}
+	return Token{}, fmt.Errorf("incorrect spelling for 'false'")
+}
+
+func (t *Tokenizer) ReadNumber(start byte) (Token, error) {
+	var numStr string
+	numStr += string(start)
+
+	for t.scanner.Scan() {
+		char := t.scanner.Bytes()[0]
+		if unicode.IsDigit(rune(char)) || char == '.' {
+			numStr += string(char)
+		} else {
+			t.buffer = &char
+			break
+		}
+	}
+
+	return Token{Type: TokenNumber, Value: numStr}, nil
 }

@@ -48,9 +48,7 @@ func Parse(t *tokenizer.Tokenizer) bool {
 					stack = stack[:len(stack)-1]
 				}
 				stack = append(stack, tokenizer.TokenString)
-			}
-
-			if len(stack) > 0 && stack[len(stack)-1] == tokenizer.TokenColon {
+			} else if len(stack) > 0 && stack[len(stack)-1] == tokenizer.TokenColon {
 				stack = stack[:len(stack)-1]
 				if len(stack) == 0 || stack[len(stack)-1] != tokenizer.TokenString {
 					fmt.Println("Error: could not find corresponding key for value: ", token.Value)
@@ -58,11 +56,15 @@ func Parse(t *tokenizer.Tokenizer) bool {
 				}
 				stack = stack[:len(stack)-1]
 				stack = append(stack, tokenizer.TokenKeyValue)
+			} else {
+				fmt.Println("Error: found invalid string:", token.Value)
+				return false
 			}
 
 		case tokenizer.TokenColon:
 			if len(stack) == 0 || stack[len(stack)-1] != tokenizer.TokenString {
 				fmt.Println("Error: found Colon prematurely")
+				fmt.Println(stack)
 				return false
 			}
 			stack = append(stack, tokenizer.TokenColon)
@@ -74,6 +76,62 @@ func Parse(t *tokenizer.Tokenizer) bool {
 			}
 			stack = append(stack, tokenizer.TokenComma)
 
+		case tokenizer.TokenNull:
+			if len(stack) > 0 && stack[len(stack)-1] == tokenizer.TokenColon {
+				stack = stack[:len(stack)-1]
+				if len(stack) == 0 || stack[len(stack)-1] != tokenizer.TokenString {
+					fmt.Println("Error: could not find corresponding key for value: ", token.Value)
+					return false
+				}
+				stack = stack[:len(stack)-1]
+				stack = append(stack, tokenizer.TokenKeyValue)
+			} else {
+				fmt.Println("Error: found invalid null")
+				return false
+			}
+
+		case tokenizer.TokenFalse:
+			if len(stack) > 0 && stack[len(stack)-1] == tokenizer.TokenColon {
+				stack = stack[:len(stack)-1]
+				if len(stack) == 0 || stack[len(stack)-1] != tokenizer.TokenString {
+					fmt.Println("Error: could not find corresponding key for value: ", token.Value)
+					return false
+				}
+				stack = stack[:len(stack)-1]
+				stack = append(stack, tokenizer.TokenKeyValue)
+			} else {
+				fmt.Println("Error: found invalid false")
+				return false
+			}
+
+		case tokenizer.TokenTrue:
+			if len(stack) > 0 && stack[len(stack)-1] == tokenizer.TokenColon {
+				stack = stack[:len(stack)-1]
+				if len(stack) == 0 || stack[len(stack)-1] != tokenizer.TokenString {
+					fmt.Println("Error: could not find corresponding key for value: ", token.Value)
+					return false
+				}
+				stack = stack[:len(stack)-1]
+				stack = append(stack, tokenizer.TokenKeyValue)
+			} else {
+				fmt.Println("Error: found invalid true")
+				return false
+			}
+
+		case tokenizer.TokenNumber:
+			if len(stack) > 0 && stack[len(stack)-1] == tokenizer.TokenColon {
+				stack = stack[:len(stack)-1]
+				if len(stack) == 0 || stack[len(stack)-1] != tokenizer.TokenString {
+					fmt.Println("Error: could not find corresponding key for value: ", token.Value)
+					return false
+				}
+				stack = stack[:len(stack)-1]
+				stack = append(stack, tokenizer.TokenKeyValue)
+			} else {
+				fmt.Println("Error: found invalid number")
+				return false
+			}
+
 		case tokenizer.TokenEOF:
 			if count != 0 && len(stack) == 0 {
 				return true
@@ -81,7 +139,6 @@ func Parse(t *tokenizer.Tokenizer) bool {
 				fmt.Println("Error: Reached EOF prematurely.")
 				return false
 			}
-
 		default:
 			fmt.Printf("Unexpected token type: %d\n", token.Type)
 		}
