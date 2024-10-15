@@ -1,5 +1,8 @@
-build: 
+build-windows: 
 	go build -o json-parser.exe cmd/json-parser/main.go
+	
+build-mac: 
+	go build -o json-parser cmd/json-parser/main.go
 
 test: 
 	go test ./tests/step1
