@@ -5,3 +5,4 @@ test:
 	go test ./tests/step1
 	go test ./tests/step2
 	go test ./tests/step3
+	go test ./tests/step4

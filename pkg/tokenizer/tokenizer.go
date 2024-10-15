@@ -12,6 +12,8 @@ type TokenType int
 const (
 	TokenLeftBrace TokenType = iota
 	TokenRightBrace
+	TokenLeftSquare
+	TokenRightSquare
 	TokenColon
 	TokenComma
 	TokenString
@@ -20,6 +22,8 @@ const (
 	TokenTrue
 	TokenFalse
 	TokenNumber
+	TokenObject
+	TokenArray
 	TokenEOF
 )
 
@@ -75,6 +79,10 @@ func (t *Tokenizer) NextToken() (Token, error) {
 		return Token{Type: TokenLeftBrace, Value: "{"}, nil
 	case '}':
 		return Token{Type: TokenRightBrace, Value: "}"}, nil
+	case '[':
+		return Token{Type: TokenLeftSquare, Value: "["}, nil
+	case ']':
+		return Token{Type: TokenRightSquare, Value: "]"}, nil
 	case ':':
 		return Token{Type: TokenColon, Value: ":"}, nil
 	case ',':
