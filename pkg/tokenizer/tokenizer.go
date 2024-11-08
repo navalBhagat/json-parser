@@ -115,9 +115,52 @@ func (t *Tokenizer) ReadString() (Token, error) {
 		if char == '"' {
 			return Token{Type: TokenString, Value: str}, nil
 		}
-		str += string(char)
+		if char == '\\' {
+			valid, sequence := t.ValidateEscapeString()
+			if !valid {
+				return Token{}, fmt.Errorf("invalid escape string")
+			}
+			str += string(char) + sequence
+		} else {
+			if char < 0x20 {
+				return Token{}, fmt.Errorf("invalid character in string: control character 0x%02X", char)
+			}
+			str += string(char)
+		}
 	}
 	return Token{}, fmt.Errorf("unterminated string")
+}
+
+func (t *Tokenizer) ValidateEscapeString() (bool, string) {
+	if !t.scanner.Scan() {
+		return false, ""
+	}
+
+	char := t.scanner.Bytes()[0]
+
+	switch char {
+	case 'b', 'f', 'n', 'r', 't', '"', '\\', '/':
+		return true, string(char)
+	case 'u':
+		unicode := string(char)
+		for i := 0; i < 4; i++ {
+			if !t.scanner.Scan() {
+				return false, ""
+			}
+			digit := t.scanner.Bytes()[0]
+			if !isHexDigit(digit) {
+				return false, ""
+			}
+			unicode += string(digit)
+		}
+		return true, unicode
+	default:
+		return false, ""
+	}
+}
+
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 }
 
 func (t *Tokenizer) ReadNull(str string) (Token, error) {
@@ -183,17 +226,104 @@ func (t *Tokenizer) ReadFalse(str string) (Token, error) {
 	return Token{}, fmt.Errorf("incorrect spelling for 'false'")
 }
 
+// func (t *Tokenizer) ReadNumber(start byte) (Token, error) {
+// 	var numStr string
+// 	numStr += string(start)
+
+// 	for t.scanner.Scan() {
+// 		char := t.scanner.Bytes()[0]
+// 		if unicode.IsDigit(rune(char)) || char == '.' {
+// 			if len(numStr) > 2 && numStr[0] == '0' && numStr[1] != '.' {
+// 				return Token{Type: TokenNumber, Value: numStr}, fmt.Errorf("invalid leading 0 in number")
+// 			}
+// 			numStr += string(char)
+// 		} else {
+// 			t.buffer = &char
+// 			break
+// 		}
+// 	}
+
+// 	return Token{Type: TokenNumber, Value: numStr}, nil
+// }
+
 func (t *Tokenizer) ReadNumber(start byte) (Token, error) {
 	var numStr string
 	numStr += string(start)
+	var currentChar byte
+	furtherProcess := true
 
 	for t.scanner.Scan() {
-		char := t.scanner.Bytes()[0]
-		if unicode.IsDigit(rune(char)) || char == '.' {
-			numStr += string(char)
+		currentChar = t.scanner.Bytes()[0]
+
+		// Integer parsing
+		if currentChar != '.' && currentChar != 'e' && currentChar != 'E' {
+			if unicode.IsDigit(rune(currentChar)) {
+				numStr += string(currentChar)
+			} else {
+				t.buffer = &currentChar
+				furtherProcess = false
+				break
+			}
 		} else {
-			t.buffer = &char
 			break
+		}
+	}
+
+	// Test for leading 0
+	if len(numStr) > 1 && numStr[0] == '0' {
+		return Token{Type: TokenNumber, Value: numStr}, fmt.Errorf("invalid leading 0 found")
+	}
+
+	// Fraction parsing
+	if furtherProcess && currentChar == '.' {
+		numStr += string(currentChar)
+		for t.scanner.Scan() {
+			currentChar = t.scanner.Bytes()[0]
+
+			if currentChar != 'e' && currentChar != 'E' {
+				if unicode.IsDigit(rune(currentChar)) {
+					numStr += string(currentChar)
+				} else {
+					t.buffer = &currentChar
+					furtherProcess = false
+					break
+				}
+			} else {
+				break
+			}
+		}
+	}
+
+	// Exponent parsing
+	if furtherProcess && (currentChar == 'e' || currentChar == 'E') {
+		numStr += string(currentChar)
+
+		if !t.scanner.Scan() {
+			return Token{Type: TokenNumber, Value: numStr}, fmt.Errorf("couldn't parse number")
+		}
+
+		currentChar = t.scanner.Bytes()[0]
+
+		if currentChar == '+' || currentChar == '-' || unicode.IsDigit(rune(currentChar)) {
+			numStr += string(currentChar)
+			for t.scanner.Scan() {
+				currentChar = t.scanner.Bytes()[0]
+
+				if unicode.IsDigit(rune(currentChar)) {
+					numStr += string(currentChar)
+				} else {
+					t.buffer = &currentChar
+					furtherProcess = false
+					break
+				}
+			}
+		} else {
+			return Token{Type: TokenNumber, Value: numStr}, fmt.Errorf("invalid exponential number")
+		}
+
+		// check for invalid sign
+		if numStr[len(numStr)-1] == '+' || numStr[len(numStr)-1] == '-' {
+			return Token{Type: TokenNumber, Value: numStr}, fmt.Errorf("Invalid sign with no numbers")
 		}
 	}
 

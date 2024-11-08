@@ -7,7 +7,9 @@ import (
 
 func Parse(t *tokenizer.Tokenizer) bool {
 	stack := []tokenizer.TokenType{}
-	count := 0
+	processedCount := 0
+	nestingCount := 0
+	const maxNestingDepth = 19
 	for {
 		token, err := t.NextToken()
 		if err != nil {
@@ -17,24 +19,36 @@ func Parse(t *tokenizer.Tokenizer) bool {
 
 		switch token.Type {
 		case tokenizer.TokenLeftBrace:
-			stack, count = handleLeftBrace(stack, count)
+			stack, processedCount = handleLeftBrace(stack, processedCount)
+			nestingCount++
+			if nestingCount > maxNestingDepth {
+				fmt.Println("Reached maximum nesting limit")
+				return false
+			}
 
 		case tokenizer.TokenRightBrace:
 			var isSuccess bool
-			stack, count, isSuccess = handleRightBrace(stack, count)
+			stack, processedCount, isSuccess = handleRightBrace(stack, processedCount)
 			if !isSuccess {
 				return false
 			}
+			nestingCount--
 
 		case tokenizer.TokenLeftSquare:
-			stack, count = handleLeftSquare(stack, count)
+			stack, processedCount = handleLeftSquare(stack, processedCount)
+			nestingCount++
+			if nestingCount > maxNestingDepth {
+				fmt.Println("Reached maximum nesting limit")
+				return false
+			}
 
 		case tokenizer.TokenRightSquare:
 			var isSuccess bool
-			stack, count, isSuccess = handleRightSquare(stack, count)
+			stack, processedCount, isSuccess = handleRightSquare(stack, processedCount)
 			if !isSuccess {
 				return false
 			}
+			nestingCount--
 
 		case tokenizer.TokenString:
 			var isSuccess bool
@@ -51,7 +65,11 @@ func Parse(t *tokenizer.Tokenizer) bool {
 			}
 
 		case tokenizer.TokenComma:
-			stack = handleComma(stack)
+			var isSuccess bool
+			stack, isSuccess = handleComma(stack)
+			if !isSuccess {
+				return false
+			}
 
 		case tokenizer.TokenNull:
 			var isSuccess bool
@@ -82,7 +100,7 @@ func Parse(t *tokenizer.Tokenizer) bool {
 			}
 
 		case tokenizer.TokenEOF:
-			return handleEOF(stack, count)
+			return handleEOF(stack, processedCount)
 
 		default:
 			fmt.Printf("Unexpected token type: %d\n", token.Type)
@@ -90,18 +108,18 @@ func Parse(t *tokenizer.Tokenizer) bool {
 	}
 }
 
-func handleLeftBrace(stack []tokenizer.TokenType, count int) ([]tokenizer.TokenType, int) {
+func handleLeftBrace(stack []tokenizer.TokenType, processedCount int) ([]tokenizer.TokenType, int) {
 	// Opening braces are always appended directly
 	stack = append(stack, tokenizer.TokenLeftBrace)
-	count++
-	return stack, count
+	processedCount++
+	return stack, processedCount
 }
 
-func handleRightBrace(stack []tokenizer.TokenType, count int) ([]tokenizer.TokenType, int, bool) {
+func handleRightBrace(stack []tokenizer.TokenType, processedCount int) ([]tokenizer.TokenType, int, bool) {
 	// Right brace can only follow a KeyValue or a LeftBrace
 	if len(stack) == 0 || (stack[len(stack)-1] != tokenizer.TokenKeyValue && stack[len(stack)-1] != tokenizer.TokenLeftBrace) {
 		fmt.Println("Error: Reached Right brace prematurely")
-		return stack, count, false
+		return stack, processedCount, false
 	}
 
 	// Remove any KeyValue(s) to reach the LeftBrace
@@ -112,7 +130,7 @@ func handleRightBrace(stack []tokenizer.TokenType, count int) ([]tokenizer.Token
 	// If no LeftBrace is found throw error
 	if len(stack) == 0 || stack[len(stack)-1] != tokenizer.TokenLeftBrace {
 		fmt.Println("Error: cannot find corresponding left brace")
-		return stack, count, false
+		return stack, processedCount, false
 	}
 
 	// Remove LeftBrace
@@ -130,22 +148,22 @@ func handleRightBrace(stack []tokenizer.TokenType, count int) ([]tokenizer.Token
 		stack = append(stack, tokenizer.TokenObject)
 	}
 
-	count++
-	return stack, count, true
+	processedCount++
+	return stack, processedCount, true
 }
 
-func handleLeftSquare(stack []tokenizer.TokenType, count int) ([]tokenizer.TokenType, int) {
+func handleLeftSquare(stack []tokenizer.TokenType, processedCount int) ([]tokenizer.TokenType, int) {
 	// Opening braces are always appended directly
 	stack = append(stack, tokenizer.TokenLeftSquare)
-	count++
-	return stack, count
+	processedCount++
+	return stack, processedCount
 }
 
-func handleRightSquare(stack []tokenizer.TokenType, count int) ([]tokenizer.TokenType, int, bool) {
+func handleRightSquare(stack []tokenizer.TokenType, processedCount int) ([]tokenizer.TokenType, int, bool) {
 	// Right square cannot follow a comma, left brace, right brace, colon, or key value
 	if len(stack) > 0 && (stack[len(stack)-1] == tokenizer.TokenComma || stack[len(stack)-1] == tokenizer.TokenLeftBrace || stack[len(stack)-1] == tokenizer.TokenRightBrace || stack[len(stack)-1] == tokenizer.TokenColon || stack[len(stack)-1] == tokenizer.TokenKeyValue) {
 		fmt.Println("Error: Reached right square brace prematurely")
-		return stack, count, false
+		return stack, processedCount, false
 	}
 
 	// Remove all objects to reach a left square
@@ -156,7 +174,7 @@ func handleRightSquare(stack []tokenizer.TokenType, count int) ([]tokenizer.Toke
 	// If no left square is found throw error
 	if len(stack) == 0 || stack[len(stack)-1] != tokenizer.TokenLeftSquare {
 		fmt.Println("Error: cannot find corresponding left square brace")
-		return stack, count, false
+		return stack, processedCount, false
 	}
 
 	// Remove left square
@@ -174,8 +192,8 @@ func handleRightSquare(stack []tokenizer.TokenType, count int) ([]tokenizer.Toke
 		stack = append(stack, tokenizer.TokenArray)
 	}
 
-	count++
-	return stack, count, true
+	processedCount++
+	return stack, processedCount, true
 }
 
 func handleString(stack []tokenizer.TokenType, token tokenizer.Token) ([]tokenizer.TokenType, bool) {
@@ -213,10 +231,14 @@ func handleColon(stack []tokenizer.TokenType) ([]tokenizer.TokenType, bool) {
 	return stack, true
 }
 
-func handleComma(stack []tokenizer.TokenType) []tokenizer.TokenType {
-	// Comma can follow anything
+func handleComma(stack []tokenizer.TokenType) ([]tokenizer.TokenType, bool) {
+	// Comma can follow anything expect right/left (square) braces
+	if len(stack) > 0 && (stack[len(stack)-1] == tokenizer.TokenLeftBrace || stack[len(stack)-1] == tokenizer.TokenRightBrace || stack[len(stack)-1] == tokenizer.TokenLeftSquare || stack[len(stack)-1] == tokenizer.TokenRightSquare) {
+		fmt.Println("Error: Invalid Comma")
+		return stack, false
+	}
 	stack = append(stack, tokenizer.TokenComma)
-	return stack
+	return stack, true
 }
 
 func handleNull(stack []tokenizer.TokenType, token tokenizer.Token) ([]tokenizer.TokenType, bool) {
@@ -304,13 +326,14 @@ func handleNumber(stack []tokenizer.TokenType, token tokenizer.Token) ([]tokeniz
 		stack = append(stack, tokenizer.TokenNumber)
 		return stack, true
 	} else {
+		fmt.Println(token.Value)
 		fmt.Println("Error: found invalid number")
 		return stack, false
 	}
 }
 
-func handleEOF(stack []tokenizer.TokenType, count int) bool {
-	if count != 0 && len(stack) == 0 {
+func handleEOF(stack []tokenizer.TokenType, processedCount int) bool {
+	if processedCount != 0 && len(stack) == 0 {
 		return true
 	} else {
 		fmt.Println("Error: Reached EOF prematurely.")
